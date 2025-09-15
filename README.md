@@ -162,3 +162,11 @@ OLLAMA_CHAT_MODEL=qwen2.5:14b-instruct
 
 **项目灵感**: [_Generative Agents: Interactive Simulacra of Human Behavior_](https://arxiv.org/pdf/2304.03442.pdf)
 
+<img width="2608" height="1458" alt="98365f1e6de0f104ff049e503eacf05a" src="https://github.com/user-attachments/assets/b3adb18e-fe77-497d-bb02-187646b94bbd" />
+<img width="2376" height="1278" alt="8256e73bad9ee94f2b0c205259d95b37" src="https://github.com/user-attachments/assets/f816f553-bb70-4acd-8b9a-8d85775d5d74" />
+<img width="2326" height="1320" alt="7c52c68362a15388964301a2b4b38068" src="https://github.com/user-attachments/assets/ade2870e-0550-42dc-a508-342d17e86ce6" />
+<img width="2412" height="1264" alt="d2281c1af3529121a1700156529544d4" src="https://github.com/user-attachments/assets/fd38f4cf-d6a0-4658-9c38-e3b890a47db1" />
+
+
+
+
