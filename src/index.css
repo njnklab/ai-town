@@ -13,11 +13,12 @@
 }
 
 .font-display {
-  font-family: 'Upheaval Pro', 'sans-serif';
+  /* 英文字体优先，缺字回退中文字体 */
+  font-family: 'Upheaval Pro', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'Heiti SC', 'SimHei', sans-serif;
 }
 
 .font-body {
-  font-family: 'VCR OSD Mono', 'monospace';
+  font-family: 'VCR OSD Mono', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'Heiti SC', 'SimHei', monospace;
 }
 
 .font-system {

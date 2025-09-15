@@ -2,7 +2,8 @@ import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { DatabaseReader, MutationCtx, mutation } from './_generated/server';
 import { Descriptions } from '../data/characters';
-import * as map from '../data/gentle';
+// Load campus map template (replaceable by Tiled-converted campus.js)
+import * as map from '../data/campus';
 import { insertInput } from './aiTown/insertInput';
 import { Id } from './_generated/dataModel';
 import { createEngine } from './aiTown/main';
@@ -67,17 +68,28 @@ async function getOrCreateDefaultWorld(ctx: MutationCtx) {
     worldId: worldId,
   });
   worldStatus = (await ctx.db.get(worldStatusId))!;
+  // Tolerate different field names from various converters
+  const width: any = (map as any).mapwidth ?? (map as any).width;
+  const height: any = (map as any).mapheight ?? (map as any).height;
+  const tileSetUrl: any = (map as any).tilesetpath ?? (map as any).tileSetUrl;
+  const tileSetDimX: any = (map as any).tilesetpxw ?? (map as any).tileSetDimX;
+  const tileSetDimY: any = (map as any).tilesetpxh ?? (map as any).tileSetDimY;
+  const tileDim: any = (map as any).tiledim ?? (map as any).tileDim;
+  const bgTiles: any = (map as any).bgtiles ?? (map as any).bgTiles ?? (map as any).bgtile;
+  const objectTiles: any = (map as any).objmap ?? (map as any).objectTiles ?? (map as any).objects;
+  const animatedSprites: any = (map as any).animatedsprites ?? (map as any).animatedSprites ?? [];
+
   await ctx.db.insert('maps', {
     worldId,
-    width: map.mapwidth,
-    height: map.mapheight,
-    tileSetUrl: map.tilesetpath,
-    tileSetDimX: map.tilesetpxw,
-    tileSetDimY: map.tilesetpxh,
-    tileDim: map.tiledim,
-    bgTiles: map.bgtiles,
-    objectTiles: map.objmap,
-    animatedSprites: map.animatedsprites,
+    width,
+    height,
+    tileSetUrl,
+    tileSetDimX,
+    tileSetDimY,
+    tileDim,
+    bgTiles,
+    objectTiles,
+    animatedSprites,
   });
   await ctx.scheduler.runAfter(0, internal.aiTown.main.runStep, {
     worldId,

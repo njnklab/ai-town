@@ -44,7 +44,7 @@ export const PixiStaticMap = PixiComponent('StaticMap', {
     const screenytiles = map.bgTiles[0][0].length;
 
     const container = new PIXI.Container();
-    const allLayers = [...map.bgTiles, ...map.objectTiles];
+    const allLayers = [...map.bgTiles];
 
     // blit bg & object layers of map onto canvas
     for (let i = 0; i < screenxtiles * screenytiles; i++) {

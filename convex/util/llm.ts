@@ -8,29 +8,33 @@ export const EMBEDDING_DIMENSION: number = OLLAMA_EMBEDDING_DIMENSION;
 
 export function detectMismatchedLLMProvider() {
   switch (EMBEDDING_DIMENSION) {
-    case OPENAI_EMBEDDING_DIMENSION:
+    case OPENAI_EMBEDDING_DIMENSION: {
       if (!process.env.OPENAI_API_KEY) {
         throw new Error(
           "Are you trying to use OpenAI? If so, run: npx convex env set OPENAI_API_KEY 'your-key'",
         );
       }
       break;
-    case TOGETHER_EMBEDDING_DIMENSION:
-      if (!process.env.TOGETHER_API_KEY) {
-        throw new Error(
-          "Are you trying to use Together.ai? If so, run: npx convex env set TOGETHER_API_KEY 'your-key'",
-        );
+    }
+    case TOGETHER_EMBEDDING_DIMENSION: {
+      // 768 既可能是 Together 也可能是 Ollama 的嵌入维度，这里仅做 Together 的校验；
+      // 如果不是 Together，将走 Ollama 或 custom 分支。
+      if (process.env.TOGETHER_API_KEY && EMBEDDING_DIMENSION === TOGETHER_EMBEDDING_DIMENSION) {
+        // together 路径需要 API Key
+        if (!process.env.TOGETHER_API_KEY) {
+          throw new Error(
+            "Are you trying to use Together.ai? If so, run: npx convex env set TOGETHER_API_KEY 'your-key'",
+          );
+        }
       }
       break;
-    case OLLAMA_EMBEDDING_DIMENSION:
-      break;
-    default:
+    }
+    default: {
       if (!process.env.LLM_API_URL) {
-        throw new Error(
-          "Are you trying to use a custom cloud-hosted LLM? If so, run: npx convex env set LLM_API_URL 'your-url'",
-        );
+        // Ollama 或自定义：不需要额外校验
       }
       break;
+    }
   }
 }
 
@@ -102,8 +106,11 @@ export function getLLMConfig(): LLMConfig {
   return {
     provider: 'ollama',
     url: process.env.OLLAMA_HOST ?? 'http://127.0.0.1:11434',
-    chatModel: process.env.OLLAMA_MODEL ?? 'llama3',
-    embeddingModel: process.env.OLLAMA_EMBEDDING_MODEL ?? 'mxbai-embed-large',
+    // 默认对话模型：gpt-oss:20b，可通过 OLLAMA_MODEL 覆盖；
+    // 如需切换到 qwen3:14b/32b，设置 OLLAMA_MODEL=qwen3:14b 或 qwen3:32b
+    chatModel: process.env.OLLAMA_MODEL ?? 'gpt-oss:20b',
+    // 默认嵌入模型：nomic-embed-text（768维）
+    embeddingModel: process.env.OLLAMA_EMBEDDING_MODEL ?? 'nomic-embed-text',
     stopWords: ['<|eot_id|>'],
     apiKey: undefined,
   };
@@ -180,11 +187,32 @@ export async function chatCompletion(
     }
   });
 
-  return {
-    content,
-    retries,
-    ms,
-  };
+  // 空输出一次短重试（最多80 tokens）
+  if (typeof content === 'string' && content.trim().length === 0) {
+    const config = getLLMConfig();
+    const retryBody = {
+      ...body,
+      model: body.model ?? config.chatModel,
+      max_tokens: Math.min(80, body.max_tokens ?? 80),
+    } as any;
+    const start = Date.now();
+    try {
+      const resp = await fetch(config.url + '/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AuthHeaders() },
+        body: JSON.stringify(retryBody),
+      });
+      if (resp.ok) {
+        const json = (await resp.json()) as CreateChatCompletionResponse;
+        const retryContent = json.choices[0].message?.content ?? '';
+        if (retryContent.trim().length > 0) {
+          return { content: retryContent, retries: retries + 1, ms: ms + (Date.now() - start) };
+        }
+      }
+    } catch (_) {}
+  }
+
+  return { content, retries, ms };
 }
 
 export async function tryPullOllama(model: string, error: string) {
@@ -704,4 +732,3 @@ export async function ollamaFetchEmbedding(text: string) {
   });
   return { embedding: result };
 }
-
