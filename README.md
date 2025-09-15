@@ -167,6 +167,8 @@ OLLAMA_CHAT_MODEL=qwen2.5:14b-instruct
 <img width="2326" height="1320" alt="7c52c68362a15388964301a2b4b38068" src="https://github.com/user-attachments/assets/ade2870e-0550-42dc-a508-342d17e86ce6" />
 <img width="2412" height="1264" alt="d2281c1af3529121a1700156529544d4" src="https://github.com/user-attachments/assets/fd38f4cf-d6a0-4658-9c38-e3b890a47db1" />
 
+<img width="3504" height="2110" alt="image" src="https://github.com/user-attachments/assets/ba094efe-4b28-421a-8e5d-f1e7378738c8" />
+
 
 
 
