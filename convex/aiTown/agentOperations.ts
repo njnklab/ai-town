@@ -55,6 +55,39 @@ export const agentGenerateMessage = internalAction({
     messageUuid: v.string(),
   },
   handler: async (ctx, args) => {
+    // 会话并发限流：全局≤3
+    const SEM_NAME = 'conversation_llm';
+    const LIMIT = Number(process.env.MAX_CONCURRENT_CONVERSATIONS ?? 3);
+    let acquired = false;
+    for (let i = 0; i < 40; i++) { // 最长 ~10s 等待
+      const res = await ctx.runMutation(api.aiTown.concurrency.acquire, {
+        worldId: args.worldId,
+        name: SEM_NAME,
+        limit: LIMIT,
+      });
+      if (res.ok) {
+        acquired = true;
+        break;
+      }
+      // 微等待后重试，避免拥堵
+      await sleep(250);
+    }
+    if (!acquired) {
+      // 拥堵严重时：只在 start 消息给一次占位，其它阶段静默丢弃
+      if (args.type === 'start') {
+        await ctx.runMutation(internal.aiTown.agent.agentSendMessage, {
+          worldId: args.worldId,
+          conversationId: args.conversationId,
+          agentId: args.agentId,
+          playerId: args.playerId,
+          text: '（稍后聊～）',
+          messageUuid: args.messageUuid,
+          leaveConversation: false,
+          operationId: args.operationId,
+        });
+      }
+      return;
+    }
     let completionFn;
     switch (args.type) {
       case 'start':
@@ -69,13 +102,21 @@ export const agentGenerateMessage = internalAction({
       default:
         assertNever(args.type);
     }
-    const text = await completionFn(
-      ctx,
-      args.worldId,
-      args.conversationId as GameId<'conversations'>,
-      args.playerId as GameId<'players'>,
-      args.otherPlayerId as GameId<'players'>,
-    );
+    let text = '';
+    try {
+      text = await completionFn(
+        ctx,
+        args.worldId,
+        args.conversationId as GameId<'conversations'>,
+        args.playerId as GameId<'players'>,
+        args.otherPlayerId as GameId<'players'>,
+      );
+    } finally {
+      await ctx.runMutation(internal.aiTown.concurrency.release, {
+        worldId: args.worldId,
+        name: SEM_NAME,
+      });
+    }
 
     await ctx.runMutation(internal.aiTown.agent.agentSendMessage, {
       worldId: args.worldId,
