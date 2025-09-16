@@ -147,6 +147,10 @@ export const agentInputs = {
           agentId: agentId,
           identity: description.identity,
           plan: description.plan,
+          gender: description.gender,
+          subjectTag: description.subjectTag,
+          verbalTics: description.verbalTics,
+          examples: description.examples,
         }),
       );
       return { agentId };

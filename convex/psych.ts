@@ -1,10 +1,65 @@
 import { v } from 'convex/values';
 import { mutation, query, internalMutation } from './_generated/server';
 import { Id } from './_generated/dataModel';
-import { BaseImpact, TraitModifiers, Social, Decay, RiskWeights, clamp, tanh, sigmoid01 } from './psychConfig';
+import {
+  BaseImpact,
+  TraitModifiers,
+  Social,
+  Decay,
+  RiskWeights,
+  clamp,
+  tanh,
+  sigmoid01,
+  EVENT_EFFECTS,
+  EVENT_PROMPT_HINTS,
+} from './psychConfig';
+import { internal as apiInternal } from './_generated/api';
 
 type Emotion = { joy: number; anxiety: number; sadness: number; anger: number };
 type Trait = { extraversion: number; neuroticism: number; conscientiousness: number; openness: number; agreeableness: number };
+
+function describeState(emotion: Emotion, stress: number, energy: number, risk: number): string {
+  const notes: string[] = [];
+  if (stress > 0.7) notes.push('压力偏高，提醒呼吸放松/拆解任务');
+  else if (stress < 0.3) notes.push('压力较低，可保持节奏');
+  if (emotion.anxiety > 0.6) notes.push('有些焦虑，先接住情绪再谈计划');
+  if (emotion.joy > 0.6) notes.push('心情不错，可适度鼓励同伴');
+  if (energy < 0.4) notes.push('能量不足，建议休息或调整作息');
+  if (energy > 0.75) notes.push('精力充沛，可安排攻坚任务');
+  if (risk > 0.65) notes.push('风险偏高，考虑求助老师/心理老师');
+  if (!notes.length) return '状态总体平稳，注意保持作息与复盘节奏。';
+  return notes.join('；');
+}
+
+function intensityLabel(x: number): string {
+  if (x >= 0.75) return '强烈';
+  if (x >= 0.4) return '中等';
+  return '轻微';
+}
+
+function humanize(ms: number) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (d > 0) return `${d}天`; 
+  if (h > 0) return `${h}小时`; 
+  if (m > 0) return `${m}分钟`; 
+  return `${s}秒`;
+}
+
+function formatEventSummary(
+  event: { type: string; intensity: number; start: number; target: 'agent' | 'class'; agentId?: string },
+  now: number,
+): string {
+  const info = EVENT_PROMPT_HINTS[event.type] ?? {
+    summary: event.type,
+    tone: '记得先共情，再给具体行动。',
+  };
+  const rel = humanize(now - event.start);
+  const scope = event.target === 'class' ? '全班' : '你';
+  return `${rel}前 ${scope}${info.summary}（${intensityLabel(event.intensity)}）`;
+}
 
 function personalModifier(kind: string, t: Trait): number {
   let mod = 0;
@@ -70,6 +125,7 @@ export const initStates = mutation({
         worldId, agentId: agent.id, name, gradeClass,
         emotion, stress, risk, energy,
         ties: [], memoryKeys: [],
+        status: describeState(emotion, stress, energy, risk),
       });
     }
   },
@@ -98,7 +154,12 @@ export const applyEvent = mutation({
       const energy = clamp(tanh(s.energy + (energyDeltaMap[event.kind] ?? 0)), 0, 1);
       const support = 0.5; // 简化
       const risk = computeRisk(stress, emotion, support);
-      await ctx.db.patch(s._id, { emotion, stress, energy, risk });
+      const status = describeState(emotion, stress, energy, risk);
+      const lastEvent = `${formatEventSummary(
+        { type: event.kind, intensity: event.intensity, start: event.time, target: 'agent', agentId: actor },
+        event.time,
+      )}。${EVENT_PROMPT_HINTS[event.kind]?.tone ?? '先共情再给建议。'}`;
+      await ctx.db.patch(s._id, { emotion, stress, energy, risk, status, lastEvent });
       await ctx.db.insert('psychSnapshots', { worldId, time: event.time, agentId: s.agentId, emotion, stress, risk, energy });
     }
   },
@@ -140,8 +201,69 @@ export const tick = mutation({
       };
       const support = 0.5; // 简化
       const risk = computeRisk(stress, e2, support);
-      await ctx.db.patch(s._id, { emotion: e2, stress, energy, risk });
+      const status = describeState(e2, stress, energy, risk);
+      await ctx.db.patch(s._id, { emotion: e2, stress, energy, risk, status });
       await ctx.db.insert('psychSnapshots', { worldId, time, agentId: s.agentId, emotion: e2, stress, risk, energy });
+    }
+  },
+});
+
+export const applyActiveEventsAllWorlds = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const worlds = await ctx.db.query('worldStatus').collect();
+    for (const ws of worlds) {
+      try {
+        await ctx.runMutation(apiInternal.psych.applyActiveEvents, { worldId: ws.worldId });
+      } catch (e) {
+        console.warn('applyActiveEvents failed for world', ws.worldId, e);
+      }
+    }
+  },
+});
+
+export const applyActiveEvents = internalMutation({
+  args: { worldId: v.id('worlds') },
+  handler: async (ctx, { worldId }) => {
+    const now = await ctx.runQuery(apiInternal.util.time.getWorldNow, { worldId });
+    const events = await ctx.db
+      .query('events')
+      .withIndex('byWorldTime', (q) => q.eq('worldId', worldId))
+      .filter((q) => q.lte(q.field('start'), now))
+      .collect();
+    const active = events.filter((e) => e.end == null || now < e.end);
+    if (!active.length) return;
+    const states = await ctx.db
+      .query('psychStates')
+      .withIndex('byWorld', (q) => q.eq('worldId', worldId))
+      .collect();
+    const tau = 2 * 24 * 3600 * 1000; // 2 days
+    for (const s of states) {
+      let dJoy = 0, dAnx = 0, dStress = 0;
+      const summaries: string[] = [];
+      for (const e of active) {
+        if (e.target === 'agent' && e.agentId !== s.agentId) continue;
+        const decay = Math.exp(-(now - e.start) / tau);
+        const eff = EVENT_EFFECTS[e.type] ?? { dStress: 0, dAnxiety: 0, dJoy: 0 };
+        dJoy += eff.dJoy * e.intensity * decay;
+        dAnx += eff.dAnxiety * e.intensity * decay;
+        dStress += eff.dStress * e.intensity * decay;
+        summaries.push(formatEventSummary(e as any, now));
+      }
+      if (dJoy === 0 && dAnx === 0 && dStress === 0) continue;
+      const emotion = {
+        joy: clamp(tanh(s.emotion.joy + dJoy)),
+        anxiety: clamp(tanh(s.emotion.anxiety + dAnx)),
+        sadness: s.emotion.sadness,
+        anger: s.emotion.anger,
+      };
+      const stress = clamp(tanh(s.stress + dStress), 0, 1);
+      const support = 0.5;
+      const risk = computeRisk(stress, emotion, support);
+      const status = describeState(emotion, stress, s.energy, risk);
+      const lastEvent = summaries.length ? `${summaries.join('；')}。` : s.lastEvent;
+      await ctx.db.patch(s._id, { emotion, stress, risk, status, lastEvent });
+      await ctx.db.insert('psychSnapshots', { worldId, time: now, agentId: s.agentId, emotion, stress, risk, energy: s.energy });
     }
   },
 });

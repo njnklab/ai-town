@@ -4,6 +4,7 @@ import { internal } from './_generated/api';
 import { internalMutation } from './_generated/server';
 import { TableNames } from './_generated/dataModel';
 import { v } from 'convex/values';
+import { api } from './_generated/api';
 
 const crons = cronJobs();
 
@@ -16,6 +17,9 @@ crons.interval(
 crons.interval('restart dead worlds', { seconds: 60 }, internal.world.restartDeadWorlds);
 
 crons.daily('vacuum old entries', { hourUTC: 4, minuteUTC: 20 }, internal.crons.vacuumOldEntries);
+crons.daily('aggregate daily stats', { hourUTC: 3, minuteUTC: 10 }, internal.dashboard.aggregateDailyStats);
+crons.daily('daily summarize memories', { hourUTC: 2, minuteUTC: 30 }, internal.crons.dailySummarizeAll);
+crons.interval('apply active events', { minutes: 5 }, internal.psych.applyActiveEventsAllWorlds);
 
 export default crons;
 
@@ -84,6 +88,26 @@ export const vacuumTable = internalMutation({
       });
     } else {
       console.log(`Vacuumed ${soFar + results.page.length} entries from ${tableName}`);
+    }
+  },
+});
+
+export const dailySummarizeAll = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const worlds = await ctx.db.query('worlds').collect();
+    for (const w of worlds) {
+      const world = await ctx.db.get(w._id);
+      if (!world) continue;
+      for (const ag of world.agents) {
+        // agent -> playerId
+        const playerId = ag.playerId;
+        try {
+          await ctx.runMutation(api.agent.memory.dailySummarize, { worldId: w._id, playerId });
+        } catch (e) {
+          console.warn('dailySummarize error', w._id, playerId, e);
+        }
+      }
     }
   },
 });

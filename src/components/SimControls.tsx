@@ -16,7 +16,7 @@ export default function SimControls() {
   const days = Math.floor(simHours / 24);
   const hours = Math.floor(simHours % 24);
   return (
-    <div className="fixed top-2 left-2 z-10 text-white text-sm bg-[rgb(53,59,89)] border border-[rgb(23,20,33)] p-2">
+    <div className="fixed bottom-4 left-4 z-20 text-white text-sm bg-[rgb(53,59,89)]/95 border border-[rgb(23,20,33)] p-2 rounded">
       <div>模拟时间：第 {days + 1} 天 {hours}:00</div>
       <div className="mt-1">速度：
         {[1, 2, 4].map((s) => (

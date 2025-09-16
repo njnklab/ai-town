@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { ActionCtx, DatabaseReader, internalMutation, internalQuery } from '../_generated/server';
+import { ActionCtx, DatabaseReader, internalMutation, internalQuery, mutation } from '../_generated/server';
 import { Doc, Id } from '../_generated/dataModel';
 import { internal } from '../_generated/api';
 import { LLMMessage, chatCompletion, fetchEmbedding } from '../util/llm';
@@ -7,6 +7,8 @@ import { asyncMap } from '../util/asyncMap';
 import { GameId, agentId, conversationId, playerId } from '../aiTown/ids';
 import { SerializedPlayer } from '../aiTown/player';
 import { memoryFields } from './schema';
+// Avoid importing _generated/api here to prevent circular type issues in tsc
+import * as embeddingsCache from './embeddingsCache';
 
 // How long to wait before updating a memory's last access time.
 export const MEMORY_ACCESS_THROTTLE = 300_000; // In ms
@@ -170,7 +172,7 @@ export async function searchMemories(
     candidates,
     n,
   });
-  return rankedMemories.map(({ memory }) => memory);
+  return rankedMemories.map(({ memory }: { memory: Memory }) => memory);
 }
 
 function makeRange(values: number[]) {
@@ -338,8 +340,8 @@ async function reflectOnMemories(
 
   // should only reflect if lastest 100 items have importance score of >500
   const sumOfImportanceScore = memories
-    .filter((m) => m._creationTime > (lastReflectionTs ?? 0))
-    .reduce((acc, curr) => acc + curr.importance, 0);
+    .filter((m: any) => m._creationTime > (lastReflectionTs ?? 0))
+    .reduce((acc: number, curr: any) => acc + curr.importance, 0);
   const shouldReflect = sumOfImportanceScore > 500;
 
   if (!shouldReflect) {
@@ -348,7 +350,7 @@ async function reflectOnMemories(
   console.debug('sum of importance score = ', sumOfImportanceScore);
   console.debug('Reflecting...');
   const prompt = ['[no prose]', '[Output only JSON]', `You are ${name}, statements about you:`];
-  memories.forEach((m, idx) => {
+  memories.forEach((m: any, idx: number) => {
     prompt.push(`Statement ${idx}: ${m.description}`);
   });
   prompt.push('What 3 high-level insights can you infer from the above statements?');
@@ -448,3 +450,148 @@ export async function latestMemoryOfType<T extends MemoryType>(
   if (!entry) return null;
   return entry as MemoryOfType<T>;
 }
+
+function dayStr(ts: number): string {
+  const d = new Date(ts);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// Write a raw turn memory for short-window recall
+export const writeTurn = internalMutation({
+  args: {
+    worldId: v.id('worlds'),
+    playerId,
+    conversationId,
+    text: v.string(),
+  },
+  handler: async (ctx, { worldId, playerId, conversationId, text }) => {
+    const ts = Date.now();
+    // Save as a lightweight memory with type 'turn'
+    const { embedding } = await fetchEmbedding(text);
+    const embeddingId = await ctx.db.insert('memoryEmbeddings', { playerId, embedding });
+    await ctx.db.insert('memories', {
+      playerId,
+      description: text,
+      importance: 1,
+      lastAccess: ts,
+      embeddingId,
+      data: { type: 'turn', conversationId, day: dayStr(ts) } as any,
+    } as any);
+  },
+});
+
+// Summarize a player's day and extract long-term facts
+export const dailySummarize = mutation({
+  args: { worldId: v.id('worlds'), playerId, day: v.optional(v.string()) },
+  handler: async (ctx, { worldId, playerId, day }) => {
+    const world = await ctx.db.get(worldId);
+    if (!world) throw new Error('World not found');
+    const now = Date.now();
+    const dayKey = day ?? dayStr(now);
+    const startOfDay = new Date(dayKey + 'T00:00:00').getTime();
+    const endOfDay = startOfDay + 24 * 3600 * 1000;
+
+    // Collect today's messages authored by player
+    const worldMsgs = await ctx.db
+      .query('messages')
+      .withIndex('conversationId', (q) => q.eq('worldId', worldId))
+      .collect();
+    const todays = worldMsgs
+      .filter((m) => m.author === playerId && m._creationTime >= startOfDay && m._creationTime < endOfDay)
+      .sort((a, b) => a._creationTime - b._creationTime);
+
+    if (todays.length === 0) return;
+
+    const playerDesc = await ctx.db
+      .query('playerDescriptions')
+      .withIndex('worldId', (q) => q.eq('worldId', worldId).eq('playerId', playerId))
+      .first();
+    const agent = world.agents.find((a) => a.playerId === playerId);
+    const agentName = playerDesc?.name ?? '学生';
+
+    const content = todays.map((m) => m.text).join('\n');
+    const prompt = `你是班级中的学生${agentName}。请用 200~400 字总结今天你参与的对话与关键行为：\n\t1. 重要事件与情绪变化；2) 学习/人际/作息方面的决策或行动；3) 你对明天的计划。\n语言客观凝练，便于未来回顾。\n材料：\n${content}`;
+    const { content: summary } = await chatCompletion({ messages: [{ role: 'user', content: prompt }], max_tokens: 400 });
+
+    const { embedding } = await fetchEmbedding(summary);
+    const embeddingId = await ctx.db.insert('memoryEmbeddings', { playerId, embedding });
+    await ctx.db.insert('memories', {
+      playerId,
+      description: summary,
+      importance: 5,
+      lastAccess: now,
+      embeddingId,
+      data: { type: 'daily_summary', day: dayKey } as any,
+    } as any);
+
+    if (agent) {
+      // Extract facts
+      const extractorPrompt = `从下面这份日总结中，抽取可长期维持的事实/习惯/关系（不超过 5 条），每条 1 句，自带 0~1 置信度。\n输出 JSON 数组：[{ "key":"study_habit", "value":"每天 6 点早自习", "score":0.8 }, ...]\n总结：<<<${summary}>>>`;
+      const { content: factsRaw } = await chatCompletion({ messages: [{ role: 'user', content: extractorPrompt }], max_tokens: 400 });
+      try {
+        const items = JSON.parse(factsRaw) as { key: string; value: string; score: number }[];
+        const now2 = Date.now();
+        for (const it of items) {
+          const existing = await ctx.db
+            .query('agentFacts')
+            .withIndex('byWorldAgentKey', (q) =>
+              q.eq('worldId', worldId).eq('agentId', agent.id as string).eq('key', it.key),
+            )
+            .first();
+          if (existing) {
+            const score = Math.max(existing.score, it.score);
+            const value = it.score >= existing.score ? it.value : existing.value;
+            await ctx.db.patch(existing._id, { value, score, updatedAt: now2 });
+          } else {
+            await ctx.db.insert('agentFacts', {
+              worldId,
+              agentId: agent.id as string,
+              key: it.key,
+              value: it.value,
+              score: it.score,
+              updatedAt: now2,
+            });
+          }
+        }
+      } catch (e) {
+        console.error('facts parse error', e, factsRaw);
+      }
+    }
+  },
+});
+
+export const recall = internalQuery({
+  args: { worldId: v.id('worlds'), playerId, agentId: v.string(), windowDays: v.number(), limit: v.optional(v.number()) },
+  handler: async (ctx, { worldId, playerId, agentId, windowDays, limit }) => {
+    const now = Date.now();
+    const windowMs = windowDays * 24 * 3600 * 1000;
+    const since = now - windowMs;
+    // Daily summaries in window
+    const summaries = await ctx.db
+      .query('memories')
+      .withIndex('playerId_type', (q) => q.eq('playerId', playerId).eq('data.type', 'daily_summary'))
+      .order('desc')
+      .collect();
+    const summariesIn = summaries.filter((m) => m._creationTime >= since);
+
+    // Recent turns in last 2 days by default
+    const turns = await ctx.db
+      .query('memories')
+      .withIndex('playerId_type', (q) => q.eq('playerId', playerId).eq('data.type', 'turn'))
+      .order('desc')
+      .take(Math.min(limit ?? 50, 200));
+    const turnsIn = turns.filter((m) => m._creationTime >= now - 2 * 24 * 3600 * 1000);
+
+    // Top facts (query directly to avoid api import cycle)
+    const factsAll = await ctx.db
+      .query('agentFacts')
+      .withIndex('byWorldAgent', (q) => q.eq('worldId', worldId).eq('agentId', agentId))
+      .collect();
+    const facts = factsAll.sort((a, b) => b.score - a.score).slice(0, 8);
+
+    return { summaries: summariesIn, turns: turnsIn, facts };
+  },
+});

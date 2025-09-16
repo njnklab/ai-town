@@ -136,7 +136,17 @@ export async function engineInsertInput(
   name: string,
   args: any,
 ): Promise<Id<'inputs'>> {
-  const now = Date.now();
+  // Try to map engine -> world to stamp inputs in world time
+  let now = Date.now();
+  const worldStatus = await ctx.db
+    .query('worldStatus')
+    .filter((q) => q.eq(q.field('engineId'), engineId))
+    .first();
+  if (worldStatus) {
+    try {
+      now = await ctx.runQuery(internal.util.time.getWorldNow, { worldId: worldStatus.worldId });
+    } catch {}
+  }
   const prevInput = await ctx.db
     .query('inputs')
     .withIndex('byInputNumber', (q) => q.eq('engineId', engineId))

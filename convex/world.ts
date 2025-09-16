@@ -73,6 +73,10 @@ export const stopInactiveWorlds = internalMutation({
 
 export const restartDeadWorlds = internalMutation({
   handler: async (ctx) => {
+    if (process.env.DISABLE_RESTART_CRON === '1') {
+      // Temporary kill-switch to avoid generationNumber conflicts during heavy load
+      return;
+    }
     const now = Date.now();
 
     // Restart an engine if it hasn't run for 2x its action duration.

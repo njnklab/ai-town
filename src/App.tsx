@@ -1,4 +1,5 @@
 import Game from './components/Game.tsx';
+import EventSimulator from './components/EventSimulator.tsx';
 
 import { ToastContainer } from 'react-toastify';
 import a16zImg from '../assets/a16z.png';
@@ -73,20 +74,9 @@ export default function Home() {
       </div> */}
 
       <div className="w-full lg:h-screen min-h-screen relative isolate overflow-hidden lg:p-8 shadow-2xl flex flex-col justify-start">
-        <h1 className="mx-auto text-4xl p-3 sm:text-8xl lg:text-9xl font-bold font-display leading-none tracking-wide game-title w-full text-left sm:text-center sm:w-auto">
-          AI Town
-        </h1>
-
-        <div className="max-w-xs md:max-w-xl lg:max-w-none mx-auto my-4 text-center text-base sm:text-xl md:text-2xl text-white leading-tight shadow-solid">
-          A virtual town where AI characters live, chat and socialize.
-          {/* <Unauthenticated>
-            <div className="my-1.5 sm:my-0" />
-            Log in to join the town
-            <br className="block sm:hidden" /> and the conversation!
-          </Unauthenticated> */}
-        </div>
-
+        {/* 收起顶部 Banner，给地图更多空间 */}
         <Game />
+        <EventSimulator />
 
         <footer className="justify-end bottom-0 left-0 w-full flex items-center mt-4 gap-3 p-6 flex-wrap pointer-events-none">
           <div className="flex gap-4 flex-grow pointer-events-none">
@@ -103,13 +93,19 @@ export default function Home() {
           <a href="https://a16z.com">
             <img className="w-8 h-8 pointer-events-auto" src={a16zImg} alt="a16z" />
           </a>
-          <a href="/dashboard" className="mr-2">
-            <button className="w-24 h-8 pointer-events-auto border">Dashboard</button>
-          </a>
           <a href="https://convex.dev/c/ai-town">
             <img className="w-20 h-8 pointer-events-auto" src={convexImg} alt="Convex" />
           </a>
         </footer>
+        {/* Dashboard FAB */}
+        <a href="/dashboard" className="fixed bottom-6 right-6 z-20">
+          <button
+            title="Dashboard"
+            className="pointer-events-auto w-12 h-12 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg flex items-center justify-center"
+          >
+            DB
+          </button>
+        </a>
         <ToastContainer position="bottom-right" autoClose={2000} closeOnClick theme="dark" />
       </div>
     </main>

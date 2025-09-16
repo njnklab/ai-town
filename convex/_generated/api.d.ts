@@ -13,8 +13,10 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as admin from "../admin.js";
 import type * as agent_conversation from "../agent/conversation.js";
 import type * as agent_embeddingsCache from "../agent/embeddingsCache.js";
+import type * as agent_facts from "../agent/facts.js";
 import type * as agent_memory from "../agent/memory.js";
 import type * as aiTown_agent from "../aiTown/agent.js";
 import type * as aiTown_agentDescription from "../aiTown/agentDescription.js";
@@ -37,15 +39,21 @@ import type * as aiTown_world from "../aiTown/world.js";
 import type * as aiTown_worldMap from "../aiTown/worldMap.js";
 import type * as constants from "../constants.js";
 import type * as crons from "../crons.js";
+import type * as dashboard from "../dashboard.js";
 import type * as engine_abstractGame from "../engine/abstractGame.js";
 import type * as engine_historicalObject from "../engine/historicalObject.js";
+import type * as engine_simTime from "../engine/simTime.js";
+import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as messages from "../messages.js";
 import type * as music from "../music.js";
+import type * as prompts_agent from "../prompts/agent.js";
+import type * as prompts_global from "../prompts/global.js";
 import type * as psych from "../psych.js";
 import type * as psychConfig from "../psychConfig.js";
 import type * as testing from "../testing.js";
+import type * as time from "../time.js";
 import type * as util_FastIntegerCompression from "../util/FastIntegerCompression.js";
 import type * as util_assertNever from "../util/assertNever.js";
 import type * as util_asyncMap from "../util/asyncMap.js";
@@ -56,6 +64,7 @@ import type * as util_llm from "../util/llm.js";
 import type * as util_minheap from "../util/minheap.js";
 import type * as util_object from "../util/object.js";
 import type * as util_sleep from "../util/sleep.js";
+import type * as util_time from "../util/time.js";
 import type * as util_types from "../util/types.js";
 import type * as util_xxhash from "../util/xxhash.js";
 import type * as world from "../world.js";
@@ -69,8 +78,10 @@ import type * as world from "../world.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   "agent/conversation": typeof agent_conversation;
   "agent/embeddingsCache": typeof agent_embeddingsCache;
+  "agent/facts": typeof agent_facts;
   "agent/memory": typeof agent_memory;
   "aiTown/agent": typeof aiTown_agent;
   "aiTown/agentDescription": typeof aiTown_agentDescription;
@@ -93,15 +104,21 @@ declare const fullApi: ApiFromModules<{
   "aiTown/worldMap": typeof aiTown_worldMap;
   constants: typeof constants;
   crons: typeof crons;
+  dashboard: typeof dashboard;
   "engine/abstractGame": typeof engine_abstractGame;
   "engine/historicalObject": typeof engine_historicalObject;
+  "engine/simTime": typeof engine_simTime;
+  events: typeof events;
   http: typeof http;
   init: typeof init;
   messages: typeof messages;
   music: typeof music;
+  "prompts/agent": typeof prompts_agent;
+  "prompts/global": typeof prompts_global;
   psych: typeof psych;
   psychConfig: typeof psychConfig;
   testing: typeof testing;
+  time: typeof time;
   "util/FastIntegerCompression": typeof util_FastIntegerCompression;
   "util/assertNever": typeof util_assertNever;
   "util/asyncMap": typeof util_asyncMap;
@@ -112,6 +129,7 @@ declare const fullApi: ApiFromModules<{
   "util/minheap": typeof util_minheap;
   "util/object": typeof util_object;
   "util/sleep": typeof util_sleep;
+  "util/time": typeof util_time;
   "util/types": typeof util_types;
   "util/xxhash": typeof util_xxhash;
   world: typeof world;

@@ -43,3 +43,32 @@ export const clamp = (x: number, lo = -1, hi = 1) => Math.max(lo, Math.min(hi, x
 export const tanh = (x: number) => Math.tanh(x);
 export const sigmoid01 = (x: number) => 1 / (1 + Math.exp(-x));
 
+// Simple mapping for prompt-side event effects
+export const EVENT_EFFECTS: Record<string, { dStress: number; dAnxiety: number; dJoy: number }> = {
+  family_violence: { dStress: +0.5, dAnxiety: +0.4, dJoy: -0.5 },
+  mock_exam_bad: { dStress: +0.3, dAnxiety: +0.2, dJoy: -0.3 },
+  love: { dStress: -0.1, dAnxiety: +0.1, dJoy: +0.4 },
+  mock_exam_good: { dStress: -0.2, dAnxiety: -0.1, dJoy: +0.5 },
+};
+
+export const EVENT_PROMPT_HINTS: Record<
+  string,
+  { summary: string; tone: string }
+> = {
+  family_violence: {
+    summary: '遭遇家庭冲突/压力',
+    tone: '情绪波动大，先稳住对方情绪，再给具体可执行的支持或求助建议。',
+  },
+  mock_exam_bad: {
+    summary: '模拟考发挥不佳，状态受挫',
+    tone: '语气里带点遗憾与共情，提醒拆解问题、安排复盘。',
+  },
+  mock_exam_good: {
+    summary: '模拟考表现不错',
+    tone: '语气可以轻松些，但别自满，提醒巩固。',
+  },
+  love: {
+    summary: '陷入/萌芽一段校园恋爱',
+    tone: '语气柔和，关心情绪同时提醒把握学习节奏。',
+  },
+};
