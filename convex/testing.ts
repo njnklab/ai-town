@@ -52,7 +52,16 @@ export const deletePage = internalMutation({
   },
 });
 
-export const kick = internalMutation({
+// Internal kick (kept for internal callers)
+export const kickInternal = internalMutation({
+  handler: async (ctx) => {
+    const { worldStatus } = await getDefaultWorld(ctx.db);
+    await kickEngine(ctx, worldStatus.worldId);
+  },
+});
+
+// Public kick for CLI: `npx convex run testing:kick`
+export const kick = mutation({
   handler: async (ctx) => {
     const { worldStatus } = await getDefaultWorld(ctx.db);
     await kickEngine(ctx, worldStatus.worldId);

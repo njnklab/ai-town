@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
 import PixiGame from './PixiGame.tsx';
+import SimControls from './SimControls';
+import EventPanel from './EventPanel';
 
 import { useElementSize } from 'usehooks-ts';
 import { Stage } from '@pixi/react';
@@ -41,6 +43,8 @@ export default function Game() {
   }
   return (
     <>
+      <SimControls />
+      <EventPanel />
       {SHOW_DEBUG_UI && <DebugTimeManager timeManager={timeManager} width={200} height={100} />}
       <div className="mx-auto w-full max-w grid grid-rows-[240px_1fr] lg:grid-rows-[1fr] lg:grid-cols-[1fr_auto] lg:grow max-w-[1400px] min-h-[480px] game-frame">
         {/* Game area */}

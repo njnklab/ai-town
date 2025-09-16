@@ -59,13 +59,16 @@ export async function startConversationMessage(
     messages: [
       {
         role: 'system',
-        content: prompt.join('\n'),
+        content:
+          prompt.join('\n') +
+          '\nRules:\n- 不要输出人名标签或“X to Y:”前缀；\n- 不要输出代码块/JSON；\n- 不要输出任何“思考/推理/分析/chain-of-thought”，尤其不要输出包含 <think>…</think> 的内容；\n- 仅输出你最终的一句话回复（自然语言、简短）。',
       },
     ],
-    max_tokens: 300,
+    max_tokens: 150,
+    temperature: 0.4,
     stop: stopWords(otherPlayer.name, player.name),
   });
-  return trimContentPrefx(content, lastPrompt);
+  return sanitizeOutput(trimContentPrefx(content, lastPrompt));
 }
 
 function trimContentPrefx(content: string, prompt: string) {
@@ -97,7 +100,12 @@ export async function continueConversationMessage(
     ctx,
     `What do you think about ${otherPlayer.name}?`,
   );
-  const memories = await memory.searchMemories(ctx, player.id as GameId<'players'>, embedding, 3);
+  const memories = await memory.searchMemories(
+    ctx,
+    player.id as GameId<'players'>,
+    embedding,
+    Number(process.env.NUM_MEMORIES_TO_SEARCH) || NUM_MEMORIES_TO_SEARCH,
+  );
   const prompt = [
     `You are ${player.name}, and you're currently in a conversation with ${otherPlayer.name}.`,
     `The conversation started at ${started.toLocaleString()}. It's now ${now.toLocaleString()}.`,
@@ -107,6 +115,14 @@ export async function continueConversationMessage(
   prompt.push(
     `Below is the current chat history between you and ${otherPlayer.name}.`,
     `DO NOT greet them again. Do NOT use the word "Hey" too often. Your response should be brief and within 200 characters.`,
+  );
+  // 明确输出约束，避免人名标签/代码块/JSON/思考内容
+  prompt.push(
+    'Rules:',
+    '- 不要输出人名标签或“X to Y:”前缀；',
+    '- 不要输出代码块/JSON；',
+    '- 不要输出任何“思考/推理/分析/chain-of-thought”，尤其不要输出包含 <think>…</think> 的内容；',
+    '- 用自然语言简短回复。',
   );
 
   const llmMessages: LLMMessage[] = [
@@ -127,10 +143,11 @@ export async function continueConversationMessage(
 
   const { content } = await chatCompletion({
     messages: llmMessages,
-    max_tokens: 300,
+    max_tokens: 150,
+    temperature: 0.4,
     stop: stopWords(otherPlayer.name, player.name),
   });
-  return trimContentPrefx(content, lastPrompt);
+  return sanitizeOutput(trimContentPrefx(content, lastPrompt));
 }
 
 export async function leaveConversationMessage(
@@ -158,6 +175,14 @@ export async function leaveConversationMessage(
     `Below is the current chat history between you and ${otherPlayer.name}.`,
     `How would you like to tell them that you're leaving? Your response should be brief and within 200 characters.`,
   );
+  // 明确输出约束
+  prompt.push(
+    'Rules:',
+    '- 不要输出人名标签或“X to Y:”前缀；',
+    '- 不要输出代码块/JSON；',
+    '- 不要输出任何“思考/推理/分析/chain-of-thought”，尤其不要输出包含 <think>…</think> 的内容；',
+    '- 用自然语言简短回复。',
+  );
   const llmMessages: LLMMessage[] = [
     {
       role: 'system',
@@ -176,10 +201,11 @@ export async function leaveConversationMessage(
 
   const { content } = await chatCompletion({
     messages: llmMessages,
-    max_tokens: 300,
+    max_tokens: 150,
+    temperature: 0.4,
     stop: stopWords(otherPlayer.name, player.name),
   });
-  return trimContentPrefx(content, lastPrompt);
+  return sanitizeOutput(trimContentPrefx(content, lastPrompt));
 }
 
 function agentPrompts(
@@ -349,4 +375,39 @@ function stopWords(otherPlayer: string, player: string) {
   // These are the words we ask the LLM to stop on. OpenAI only supports 4.
   const variants = [`${otherPlayer} to ${player}`];
   return variants.flatMap((stop) => [stop + ':', stop.toLowerCase() + ':']);
+}
+
+// 输出清洗：去除<think>…</think>、代码块/JSON、冗长前言，截断长度
+function sanitizeOutput(raw: string): string {
+  let t = raw ?? '';
+  // 去除姓名或多余前缀 "X: "
+  t = t.replace(/^\s*([\p{L}\w]+)\s*[:：]\s*/u, '');
+  // 去除 <think>…</think> 或仅有开标签的内容（直到空行或结尾）
+  t = t.replace(/<think>[\s\S]*?(<\/think>|\n\n|$)/gi, '');
+  // 去除“思考/分析/推理：”段落（直到空行）
+  t = t.replace(/^(思考|分析|推理|Chain[- ]?of[- ]?thought|Reasoning)[:：][\s\S]*?(\n\n|$)/i, '');
+  // 去除代码块与内联反引号
+  t = t.replace(/```[\s\S]*?```/g, '');
+  t = t.replace(/`{1,3}[^`]*`{1,3}/g, '');
+  // 粗暴移除巨大 JSON 块
+  if (/\{[\s\S]{20,}\}/.test(t)) t = t.replace(/\{[\s\S]*\}/g, '');
+  // 空白规整
+  t = t.replace(/[ \t\u3000]+/g, ' ').replace(/\n{2,}/g, '\n').trim();
+  // 长度截断（中文 140 左右）
+  const MAX_LEN = 140;
+  if (t.length > MAX_LEN) {
+    const cut = t.slice(0, MAX_LEN + 1);
+    const lastPunc = Math.max(
+      cut.lastIndexOf('。'),
+      cut.lastIndexOf('！'),
+      cut.lastIndexOf('？'),
+      cut.lastIndexOf('~'),
+      cut.lastIndexOf('!'),
+      cut.lastIndexOf('?'),
+      cut.lastIndexOf('.')
+    );
+    t = (lastPunc > 20 ? cut.slice(0, lastPunc + 1) : cut.slice(0, MAX_LEN)).trim();
+  }
+  if (!t) t = '嗯。';
+  return t;
 }

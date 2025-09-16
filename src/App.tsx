@@ -103,6 +103,9 @@ export default function Home() {
           <a href="https://a16z.com">
             <img className="w-8 h-8 pointer-events-auto" src={a16zImg} alt="a16z" />
           </a>
+          <a href="/dashboard" className="mr-2">
+            <button className="w-24 h-8 pointer-events-auto border">Dashboard</button>
+          </a>
           <a href="https://convex.dev/c/ai-town">
             <img className="w-20 h-8 pointer-events-auto" src={convexImg} alt="Convex" />
           </a>
