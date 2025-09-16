@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import PixiGame from './PixiGame.tsx';
+import SimControls from './SimControls';
 
 import { useElementSize } from 'usehooks-ts';
 import { Stage } from '@pixi/react';
@@ -11,6 +12,7 @@ import { useHistoricalTime } from '../hooks/useHistoricalTime.ts';
 import { DebugTimeManager } from './DebugTimeManager.tsx';
 import { GameId } from '../../convex/aiTown/ids.ts';
 import { useServerGame } from '../hooks/serverGame.ts';
+import ErrorBoundary from './ErrorBoundary.tsx';
 
 export const SHOW_DEBUG_UI = !!import.meta.env.VITE_SHOW_DEBUG_UI;
 
@@ -40,7 +42,8 @@ export default function Game() {
     return null;
   }
   return (
-    <>
+    <ErrorBoundary>
+      <SimControls />
       {SHOW_DEBUG_UI && <DebugTimeManager timeManager={timeManager} width={200} height={100} />}
       <div className="mx-auto w-full max-w grid grid-rows-[240px_1fr] lg:grid-rows-[1fr] lg:grid-cols-[1fr_auto] lg:grow max-w-[1400px] min-h-[480px] game-frame">
         {/* Game area */}
@@ -80,6 +83,6 @@ https://github.com/michalochman/react-pixi-fiber/issues/145#issuecomment-5315492
           />
         </div>
       </div>
-    </>
+    </ErrorBoundary>
   );
 }

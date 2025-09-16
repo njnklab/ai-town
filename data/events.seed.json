@@ -1,0 +1,13 @@
+[
+  { "id": "ev1", "kind": "mock_exam", "time": 0, "actors": ["s01"], "intensity": 0.7, "payload": { "difficulty": "hard", "score": 62, "rank": 45 } },
+  { "id": "ev2", "kind": "quiz_low_score", "time": 2, "actors": ["s02"], "intensity": 0.8, "payload": { "score": 55 } },
+  { "id": "ev3", "kind": "quiz_high_score", "time": 3, "actors": ["s03"], "intensity": 0.6, "payload": { "score": 95 } },
+  { "id": "ev4", "kind": "teacher_praise", "time": 4, "actors": ["s03"], "intensity": 0.5 },
+  { "id": "ev5", "kind": "peer_conflict", "time": 5, "actors": ["s04", "s05"], "intensity": 0.6, "location": "classroom" },
+  { "id": "ev6", "kind": "peer_support", "time": 6, "actors": ["s02", "s06"], "intensity": 0.5, "location": "cafeteria" },
+  { "id": "ev7", "kind": "parent_pressure", "time": 7, "actors": ["s01"], "intensity": 0.6 },
+  { "id": "ev8", "kind": "extra_homework", "time": 8, "actors": ["s07"], "intensity": 0.4 },
+  { "id": "ev9", "kind": "self_reflection", "time": 9, "actors": ["s08"], "intensity": 0.4 },
+  { "id": "ev10", "kind": "club_activity", "time": 10, "actors": ["s05"], "intensity": 0.5, "location": "playground" }
+]
+

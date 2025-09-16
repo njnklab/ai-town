@@ -27,6 +27,17 @@ export const memoryFields = {
       type: v.literal('reflection'),
       relatedMemoryIds: v.array(v.id('memories')),
     }),
+    // Lightweight turns log for short-window recall
+    v.object({
+      type: v.literal('turn'),
+      conversationId,
+      day: v.string(), // YYYY-MM-DD for grouping
+    }),
+    // Daily summary for long-window recall
+    v.object({
+      type: v.literal('daily_summary'),
+      day: v.string(), // YYYY-MM-DD
+    }),
   ),
 };
 export const memoryTables = {

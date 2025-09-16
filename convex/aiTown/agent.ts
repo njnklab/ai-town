@@ -247,10 +247,11 @@ export class Agent {
       );
     }
     const operationId = game.allocId('operations');
-    console.log(`Agent ${this.id} starting operation ${name} (${operationId})`);
-    game.scheduleOperation(name, { operationId, ...args } as any);
+    const nameStr = String(name);
+    console.log(`Agent ${this.id} starting operation ${nameStr} (${operationId})`);
+    game.scheduleOperation(nameStr as any, { operationId, ...args } as any);
     this.inProgressOperation = {
-      name,
+      name: nameStr,
       operationId,
       started: now,
     };

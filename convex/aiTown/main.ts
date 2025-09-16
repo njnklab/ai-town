@@ -6,6 +6,7 @@ import { internal } from '../_generated/api';
 import { sleep } from '../util/sleep';
 import { Id } from '../_generated/dataModel';
 import { ENGINE_ACTION_DURATION } from '../constants';
+import { internal as apiInternal } from '../_generated/api';
 
 export async function createEngine(ctx: MutationCtx) {
   const now = Date.now();
@@ -37,7 +38,8 @@ export async function startEngine(ctx: MutationCtx, worldId: Id<'worlds'>) {
   if (engine.running) {
     throw new Error(`Engine ${engineId} isn't currently stopped`);
   }
-  const now = Date.now();
+  // Align engine time to world clock
+  const now = await ctx.runQuery(apiInternal.util.time.getWorldNow, { worldId });
   const generationNumber = engine.generationNumber + 1;
   await ctx.db.patch(engineId, {
     // Forcibly advance time to the present. This does mean we'll skip
@@ -100,13 +102,18 @@ export const runStep = internalAction({
       });
       const game = new Game(engine, args.worldId, gameState);
 
-      let now = Date.now();
-      const deadline = now + args.maxDuration;
-      while (now < deadline) {
-        await game.runStep(ctx, now);
-        const sleepUntil = Math.min(now + game.stepDuration, deadline);
-        await sleep(sleepUntil - now);
-        now = Date.now();
+      // Real-time loop for wall-clock, simulate up to current world-clock each slice
+      let realNow = Date.now();
+      const deadline = realNow + args.maxDuration;
+      while (realNow < deadline) {
+        const worldNow = await ctx.runQuery(apiInternal.util.time.getWorldNow, {
+          worldId: args.worldId,
+          realNow,
+        });
+        await game.runStep(ctx, worldNow);
+        const sleepUntil = Math.min(realNow + game.stepDuration, deadline);
+        await sleep(sleepUntil - realNow);
+        realNow = Date.now();
       }
       await ctx.scheduler.runAfter(0, internal.aiTown.main.runStep, {
         worldId: args.worldId,

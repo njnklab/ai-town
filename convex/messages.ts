@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import { internal } from './_generated/api';
 import { insertInput } from './aiTown/insertInput';
 import { conversationId, playerId } from './aiTown/ids';
 
@@ -43,6 +44,13 @@ export const writeMessage = mutation({
       messageUuid: args.messageUuid,
       text: args.text,
       worldId: args.worldId,
+    });
+    // Persist a lightweight turn memory for recall
+    await ctx.runMutation(internal.agent.memory.writeTurn, {
+      worldId: args.worldId,
+      playerId: args.playerId,
+      conversationId: args.conversationId,
+      text: args.text,
     });
     await insertInput(ctx, args.worldId, 'finishSendingMessage', {
       conversationId: args.conversationId,
